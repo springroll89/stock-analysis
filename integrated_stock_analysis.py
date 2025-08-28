@@ -431,13 +431,16 @@ class IntegratedStockAnalyzer:
         if df.empty:
             return {}
 
+        # 兼容两种列名
+        change_col = '当日涨幅%' if '当日涨幅%' in df.columns else '涨幅%'
+
         analysis = {
             'total_count': len(df),
             'avg_volume_ratio': df['放量倍数'].mean(),
-            'avg_change_pct': df['涨幅%'].mean(),
+            'avg_change_pct': df[change_col].mean(),
             'total_amount': df['成交额(亿)'].sum(),
             'top_volume': df.nlargest(10, '放量倍数'),
-            'top_change': df.nlargest(10, '涨幅%'),
+            'top_change': df.nlargest(10, change_col),
         }
 
         # 如果行业列不存在，添加行业信息（向后兼容）
@@ -448,7 +451,7 @@ class IntegratedStockAnalyzer:
         industry_dist = df.groupby('行业').agg({
             '代码': 'count',
             '放量倍数': 'mean',
-            '涨幅%': 'mean',
+            change_col: 'mean',
             '成交额(亿)': 'sum'
         }).round(2)
 
@@ -799,7 +802,9 @@ def main():
                     st.metric("平均放量", f"{avg_volume:.2f}倍")
 
                 with col2:
-                    avg_change = df_results['涨幅%'].mean()
+                    # 兼容两种列名
+                    change_col = '当日涨幅%' if '当日涨幅%' in df_results.columns else '涨幅%'
+                    avg_change = df_results[change_col].mean()
                     st.metric("平均涨幅", f"{avg_change:.2f}%")
 
                 with col3:
@@ -811,12 +816,23 @@ def main():
                     st.metric("最大放量", f"{max_volume:.1f}倍")
 
                 # 排序选项
-                sort_options = {
-                    '放量倍数': '放量倍数',
-                    '涨幅%': '涨幅%',
-                    '成交额(亿)': '成交额(亿)',
-                    '市盈率': '市盈率'
-                }
+                # 动态确定可用的列
+                available_cols = df_results.columns.tolist()
+                sort_options = {}
+
+                # 根据实际存在的列动态创建排序选项
+                if '放量倍数' in available_cols:
+                    sort_options['放量倍数'] = '放量倍数'
+                if '涨幅%' in available_cols:
+                    sort_options['涨幅%'] = '涨幅%'
+                elif '当日涨幅%' in available_cols:
+                    sort_options['当日涨幅%'] = '当日涨幅%'
+                if '成交额(亿)' in available_cols:
+                    sort_options['成交额(亿)'] = '成交额(亿)'
+                if '市盈率' in available_cols:
+                    sort_options['市盈率'] = '市盈率'
+                if '突破后涨幅%' in available_cols:
+                    sort_options['突破后涨幅%'] = '突破后涨幅%'
 
                 col1, col2 = st.columns([3, 1])
                 with col1:
@@ -1000,15 +1016,19 @@ def main():
 
             with col1:
                 st.markdown("### 🔝 放量Top10")
-                top_volume_cols = ['代码', '名称', '行业', '放量倍数', '涨幅%'] if '行业' in analysis[
-                    'top_volume'].columns else ['代码', '名称', '放量倍数', '涨幅%']
+                # 检查列名
+                change_col = '当日涨幅%' if '当日涨幅%' in analysis['top_volume'].columns else '涨幅%'
+                top_volume_cols = ['代码', '名称', '行业', '放量倍数', change_col] if '行业' in analysis[
+                    'top_volume'].columns else ['代码', '名称', '放量倍数', change_col]
                 top_volume = analysis['top_volume'][top_volume_cols]
                 st.dataframe(top_volume, use_container_width=True, hide_index=True)
 
             with col2:
                 st.markdown("### 📈 涨幅Top10")
-                top_change_cols = ['代码', '名称', '行业', '涨幅%', '放量倍数'] if '行业' in analysis[
-                    'top_change'].columns else ['代码', '名称', '涨幅%', '放量倍数']
+                # 检查列名
+                change_col = '当日涨幅%' if '当日涨幅%' in analysis['top_change'].columns else '涨幅%'
+                top_change_cols = ['代码', '名称', '行业', change_col, '放量倍数'] if '行业' in analysis[
+                    'top_change'].columns else ['代码', '名称', change_col, '放量倍数']
                 top_change = analysis['top_change'][top_change_cols]
                 st.dataframe(top_change, use_container_width=True, hide_index=True)
 
@@ -1023,15 +1043,19 @@ def main():
             st.markdown("### 🔥 市场热力图")
 
             # 准备数据
-            df_heatmap = df_results[['代码', '名称', '放量倍数', '涨幅%', '成交额(亿)']].copy()
+            # 兼容两种列名
+            change_col = '当日涨幅%' if '当日涨幅%' in df_results.columns else '涨幅%'
+            price_col = '放量收盘价' if '放量收盘价' in df_results.columns else '收盘价'
+
+            df_heatmap = df_results[['代码', '名称', '放量倍数', change_col, '成交额(亿)']].copy()
 
             # 创建散点图
             fig = px.scatter(
                 df_heatmap,
                 x='放量倍数',
-                y='涨幅%',
+                y=change_col,
                 size='成交额(亿)',
-                color='涨幅%',
+                color=change_col,
                 hover_data=['代码', '名称'],
                 title="放量与涨幅关系图",
                 color_continuous_scale='RdYlGn',
