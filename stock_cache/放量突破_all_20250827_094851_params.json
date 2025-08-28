@@ -1,0 +1,8 @@
+{
+  "market": "all",
+  "days_back": 7,
+  "min_volume_ratio": 3.0,
+  "min_change_pct": 0.0,
+  "max_change_pct": 5.0,
+  "max_volume_ratio": 6.0
+}
